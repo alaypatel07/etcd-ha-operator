@@ -1,0 +1,58 @@
+---
+
+- name: Verify
+  hosts: localhost
+  connection: local
+  vars:
+    ansible_python_interpreter: '{{ ansible_playbook_python }}'
+  tasks:
+#    TODO: refactor, remove hard coded values, cluster name
+    - name: Get all resources in {{ namespace }}
+      set_fact:
+        pods: '{{ q("k8s", api_version="v1", kind="Pod", namespace=namespace, label_selector="etcd_cluster=example-etcd-cluster,app=etcd") }}'
+        services: '{{ q("k8s", api_version="v1", kind="Service", namespace=namespace, label_selector="etcd_cluster=example-etcd-cluster,app=etcd") }}'
+        sts: '{{ q("k8s", api_version="apps/v1", kind="StatefulSet", namespace=namespace, resource_name="example-etcd-cluster") }}'
+
+    - name: set assert facts when state=present
+#      TODO: refactor, remove hard coded values, pod count
+
+      set_fact:
+        number_of_pods: 3
+        number_of_services: 2
+        number_of_sts: 1
+      when: state == "present"
+
+    - name: set assert facts when state=absent
+      set_fact:
+        number_of_pods: 0
+        number_of_services: 0
+        number_of_sts: 0
+      when: state == "absent"
+
+    - block:
+        - assert:
+            that: services|length  == 2
+        - assert:
+            that: pods|length  == 3
+        - assert:
+            that: sts|length == 1
+      when: state == "present"
+
+    - block:
+        - name: set deletion timestamps
+          set_fact:
+            pods_deletion_timestamp: "{{ pods | selectattr('metadata.deletionTimestamp', 'defined') | list}}"
+            services_deletion_timestamp: "{{ services | selectattr('metadata.deletionTimestamp', 'defined') | list }}"
+            sts_deletion_timestamp: "{{ sts | selectattr('metadata.deletionTimestamp', 'defined') | list }}"
+
+        - debug: var=pods_deletion_timestamp
+        - debug: var=services_deletion_timestamp
+        - debug: var=sts_deletion_timestamp
+
+        - assert:
+            that: services|length == services_deletion_timestamp|length
+        - assert:
+            that: pods_deletion_timestamp|length == pods|length
+        - assert:
+            that: sts|length == sts_deletion_timestamp|length
+      when: state == "absent"

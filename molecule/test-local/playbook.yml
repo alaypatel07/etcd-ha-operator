@@ -16,7 +16,7 @@
     register: build_cmd
     changed_when: not prev_hash.stdout or (prev_hash.stdout and prev_hash.stdout not in ''.join(build_cmd.stdout_lines[-2:]))
 
-- name: Converge
+- name: Converge create etcd CR
   hosts: localhost
   connection: local
   vars:
@@ -59,7 +59,7 @@
       namespace: '{{ namespace }}'
       definition: "{{ custom_resource }}"
 
-  - name: Set cr fact
+  - name: Set CR fact
     k8s_facts:
       api_version: '{{ custom_resource.apiVersion }}'
       kind: '{{ custom_resource.kind }}'
@@ -69,7 +69,7 @@
 
   - debug: var=temp_cr
 
-  - name: Wait 40s for reconcilation to run
+  - name: Wait 100s for reconcilation to run
     k8s_facts:
       api_version: '{{ custom_resource.apiVersion }}'
       kind: '{{ custom_resource.kind }}'
@@ -77,8 +77,52 @@
       name: '{{ custom_resource.metadata.name }}'
     register: cr
     until:
-    - "'Successful' in (cr | json_query('items[].status.conditions[].reason'))"
+    - "'Available' in (cr | json_query('resources[].status.phase'))"
     delay: 10
-    retries: 10
+    retries: 50
 
-- import_playbook: '{{ playbook_dir }}/../default/asserts.yml'
+  - name: set the assert state=present
+    set_fact:
+      state: present
+
+# TODO: Add asserts for checking etcd-membership
+# TODO: Add asserts for checking CR status
+- import_playbook: '{{ playbook_dir }}/../default/asserts_kube_resources.yml'
+
+- name: Converge delete etcd CR
+  hosts: localhost
+  connection: local
+  vars:
+    ansible_python_interpreter: '{{ ansible_playbook_python }}'
+    deploy_dir: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/deploy"
+    pull_policy: Never
+    REPLACE_IMAGE: etcd.database.coreos.com/etcd-ha-operator:testing
+    custom_resource: "{{ lookup('file', '/'.join([deploy_dir, 'cr.yaml'])) | from_yaml }}"
+  tasks:
+  - name: Make sure the etcd CR is available from previous tasks
+    k8s_facts:
+      api_version: '{{ custom_resource.apiVersion }}'
+      kind: '{{ custom_resource.kind }}'
+      namespace: '{{ namespace }}'
+      name: '{{ custom_resource.metadata.name }}'
+    register: cr
+    until:
+      - "'Available' in (cr | json_query('resources[].status.phase'))"
+    delay: 10
+    retries: 50
+
+  - name: Delete the etcd.database.coreos.com/v1beta3.EtcdCluster
+    k8s:
+      state: absent
+      namespace: '{{ namespace }}'
+      definition: "{{ custom_resource }}"
+
+  - name: set fact for delete CR
+    set_fact:
+      state: absent
+
+- import_playbook: '{{ playbook_dir }}/../default/asserts_kube_resources.yml'
+
+# TODO: Add scaling up
+# TODO: Add scaling down
+# TODO: Add TLS

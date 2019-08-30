@@ -18,5 +18,3 @@
       msg: "{{ lookup('k8s', group='etcd.database.coreos.com', api_version='v1beta3', kind='EtcdCluster', namespace=namespace, resource_name=cr.metadata.name) }}"
     vars:
       cr: "{{ lookup('file', '/'.join([deploy_dir, 'cr.yaml'])) | from_yaml }}"
-
-- import_playbook: "{{ playbook_dir }}/../default/asserts.yml"

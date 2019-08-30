@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: etcd-ha-operator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: etcd-ha-operator
+  template:
+    metadata:
+      labels:
+        name: etcd-ha-operator
+    spec:
+      serviceAccountName: etcd-ha-operator
+      containers:
+      - name: ansible-operator
+        image: "{{ REPLACE_IMAGE }}"
+        ports:
+        - containerPort: 60000
+          name: metrics
+        imagePullPolicy: "{{ pull_policy|default('Always') }}"
+        env:
+        - name: WATCH_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: OPERATOR_NAME
+          value: "etcd-ha-operator"

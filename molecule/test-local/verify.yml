@@ -15,3 +15,9 @@
 
     - name: Output pods
       debug: var=pods
+
+    - name: set fact for present
+      set_fact:
+        state: "present"
+
+- import_playbook: '{{ playbook_dir }}/../default/asserts_kube_resources.yml'
